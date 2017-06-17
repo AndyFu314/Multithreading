@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using static System.Console;
 using static System.Threading.Thread;
@@ -12,71 +13,32 @@ namespace Multithreading
     {
         static void Main(string[] args)
         {
-            Task t;
-
-            t = AsynchronyWithTPL();
-            t.Wait();
-
-            t = AsynchronyWithAwait();
+            Task t = AsynchronousProcessing();
             t.Wait();
 
             Console.ReadKey();
         }
-
-        static Task AsynchronyWithTPL()
+        
+        static async Task AsynchronousProcessing()
         {
-            var containerTask = new Task(() => {
-                Task<string> t = GetInfoAsync("TPL 1");
-                t.ContinueWith(task =>
-                {
-                    WriteLine(t.Result);
+            Task<string> t1 = GetInfoAsync("Task 1", 3);
+            Task<string> t2 = GetInfoAsync("Task 2", 5);
 
-                    Task<string> t2 = GetInfoAsync("TPL 2");
-                    t2.ContinueWith(
-                        innerTask => WriteLine(innerTask.Result),
-                        TaskContinuationOptions.NotOnFaulted | TaskContinuationOptions.AttachedToParent);
-                    t2.ContinueWith(
-                        innerTask => WriteLine(innerTask.Exception.InnerException),
-                        TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.AttachedToParent);
-                },
-                TaskContinuationOptions.NotOnFaulted | TaskContinuationOptions.AttachedToParent);
-
-                t.ContinueWith(
-                    task => WriteLine(t.Exception.InnerException),
-                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.AttachedToParent);
-            });
-
-            containerTask.Start();
-            return containerTask;
-        }
-
-        static async Task AsynchronyWithAwait()
-        {
-            try
+            string[] results = await Task.WhenAll(t1, t2);
+            foreach (var result in results)
             {
-                string result;
-
-                result = await GetInfoAsync("Async 1");
                 WriteLine(result);
-
-                result = await GetInfoAsync("Async 2");
-                WriteLine(result);
-            }
-            catch (Exception ex)
-            {
-                WriteLine(ex);
             }
         }
 
-        private static async Task<string> GetInfoAsync(string name)
+        private static async Task<string> GetInfoAsync(string name, int seconds)
         {
-            WriteLine($"Task {name} started!");
-            await Task.Delay(TimeSpan.FromSeconds(2));
+            // the same worker thread
+            await Task.Delay(TimeSpan.FromSeconds(seconds));
 
-            if (name == "TPL 2")
-            {
-                throw new Exception("Boom!");
-            }
+            // different worker threads
+            //await Task.Run(() =>
+            //    Thread.Sleep(TimeSpan.FromSeconds(seconds)));
 
             return
                 $"Task {name} is running on a thread id {CurrentThread.ManagedThreadId}" +
