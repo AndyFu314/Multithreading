@@ -14,72 +14,80 @@ namespace Multithreading
 {
     class Program
     {
-        private static Label _label;
 
-        [STAThread]
         static void Main(string[] args)
         {
-            var app = new Application();
-            var win = new Window();
-            var panel = new StackPanel();
-            var button = new Button();
-            _label = new Label();
-            _label.Height = 200;
-            _label.FontSize = 32;
-            button.Height = 100;
-            button.FontSize = 32;
-            button.Content = new TextBlock { Text = "Start asynchronous operations" };
-            button.Click += Click;
-            panel.Children.Add(_label);
-            panel.Children.Add(button);
-            win.Content = panel;
-            app.Run(win);
+            Task t;
+
+            t = AsyncTask();
+            t.Wait();
+
+            AsyncVoid();
+            Sleep(TimeSpan.FromSeconds(3));
+
+            t = AsyncTaskWithErrors();
+            while (!t.IsFaulted)
+            {
+                Sleep(TimeSpan.FromSeconds(1));
+            }
+            WriteLine(t.Exception);
+
+            //try
+            //{
+            //    AsyncVoidWithErrors();
+            //    Sleep(TimeSpan.FromSeconds(3));
+            //}
+            //catch (Exception ex)
+            //{
+            //    WriteLine(ex);
+            //}
+
+            int[] numbers = { 1, 2, 3, 4, 5 };
+            Array.ForEach(numbers, async number =>
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                if (number == 3) throw new Exception("Boom!");
+                WriteLine(number);
+            });
 
             ReadLine();
         }
 
-        static async void Click(object sender, EventArgs e)
+        static async Task AsyncTaskWithErrors()
         {
-            _label.Content = new TextBlock { Text = "Calculating..." };
-            TimeSpan resultWithContext = await Test();
-            TimeSpan resultNoContext = await TestNoContext();
-            //TimeSpan resultNoContext = await TestNoContext().ConfigureAwait(false);
-
-            var sb = new StringBuilder();
-            sb.AppendLine($"With the context: {resultWithContext}");
-            sb.AppendLine($"Without the context: {resultNoContext}");
-            sb.AppendLine("Ratio: " +
-                $"{resultWithContext.TotalMilliseconds / resultNoContext.TotalMilliseconds:0.00}");
-            _label.Content = new TextBlock { Text = sb.ToString() };
+            string result = await GetInfoAsync("AsyncTaskException", 2);
+            WriteLine(result);
         }
 
-        private static async Task<TimeSpan> Test()
+        static async void AsyncVoidWithErrors()
         {
-            const int iterationsNumber = 100000;
-            var sw = new Stopwatch();
-            sw.Start();
-            for (int i = 0; i < iterationsNumber; i++)
-            {
-                var t = Task.Run(() => { });
-                await t;
-            }
-            sw.Stop();
-            return sw.Elapsed;
+            string result = await GetInfoAsync("AsyncVoidException", 2);
+            WriteLine(result);
         }
 
-        private static async Task<TimeSpan> TestNoContext()
+        static async Task AsyncTask()
         {
-            const int iterationsNumber = 100000;
-            var sw = new Stopwatch();
-            sw.Start();
-            for (int i = 0; i < iterationsNumber; i++)
+            string result = await GetInfoAsync("AsyncTask", 2);
+            WriteLine(result);
+        }
+
+        static async void AsyncVoid()
+        {
+            string result = await GetInfoAsync("AsyncVoid", 2);
+            WriteLine(result);
+        }
+
+        private static async Task<string> GetInfoAsync(string name, int seconds)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(seconds));
+            if (name.Contains("Exception"))
             {
-                var t = Task.Run(() => { });
-                await t.ConfigureAwait(
-                    continueOnCapturedContext: false);
+                throw new Exception($"Boom from {name}!");
             }
-            sw.Stop();
-            return sw.Elapsed;
+
+            return
+                $"Task {name} is running on a thread id {CurrentThread.ManagedThreadId}." +
+                $" Is thread pool thread: {CurrentThread.IsThreadPoolThread}";
         }
     }
 }
