@@ -18,31 +18,87 @@ namespace Multithreading
 
             Console.ReadKey();
         }
-        
+
         static async Task AsynchronousProcessing()
         {
+            // scenario 1
+            WriteLine("1. Single exception");
+
+            try
+            {
+                string result = await GetInfoAsync("Task 1", 2);
+                WriteLine(result);
+            }
+            catch (Exception ex)
+            {
+                WriteLine($"Exception details: {ex}");
+            }
+
+            // scenario 2
+            WriteLine();
+            WriteLine("2. Multiple exceptions");
+
             Task<string> t1 = GetInfoAsync("Task 1", 3);
             Task<string> t2 = GetInfoAsync("Task 2", 5);
-
-            string[] results = await Task.WhenAll(t1, t2);
-            foreach (var result in results)
+            try
             {
+                string[] results = await Task.WhenAll(t1, t2);
+                WriteLine(results.Length);
+            }
+            catch (Exception ex)
+            {
+                WriteLine($"Exception details: {ex}");
+            }
+
+            // scenario 3
+            WriteLine();
+            WriteLine("3. Multiple exceptions with AggregateException");
+
+            t1 = GetInfoAsync("Task 1", 3);
+            t2 = GetInfoAsync("Task 2", 2);
+            Task<string[]> t3 = Task.WhenAll(t1, t2);
+            try
+            {
+                string[] results = await t3;
+                WriteLine(results.Length);
+            }
+            catch
+            {
+                var ae = t3.Exception.Flatten();
+                var exceptions = ae.InnerExceptions;
+                WriteLine($"Exceptions caught: {exceptions.Count}");
+                foreach (var ex in exceptions)
+                {
+                    WriteLine($"Exception details: {ex}");
+                    WriteLine();
+                }
+            }
+
+            // scenario 4
+            WriteLine();
+            WriteLine("4. await in catch an finally blocks");
+
+            try
+            {
+                string result = await GetInfoAsync("Task 1", 2);
                 WriteLine(result);
+            }
+            catch (Exception ex)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                WriteLine($"Catch block with await: Exception details: {ex}");
+            }
+            finally
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                WriteLine("Finally block");
             }
         }
 
         private static async Task<string> GetInfoAsync(string name, int seconds)
         {
-            // the same worker thread
             await Task.Delay(TimeSpan.FromSeconds(seconds));
-
-            // different worker threads
-            //await Task.Run(() =>
-            //    Thread.Sleep(TimeSpan.FromSeconds(seconds)));
-
-            return
-                $"Task {name} is running on a thread id {CurrentThread.ManagedThreadId}" +
-                $" Is thread pool thread: {CurrentThread.IsThreadPoolThread}";
+            throw new Exception($"Boom from {name}!");
         }
     }
 }
