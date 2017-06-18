@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,65 +18,22 @@ namespace Multithreading
 
         static void Main(string[] args)
         {
-            Task t;
-
-            t = AsyncTask();
+            Task t = AsynchronousProcessing();
             t.Wait();
-
-            AsyncVoid();
-            Sleep(TimeSpan.FromSeconds(3));
-
-            t = AsyncTaskWithErrors();
-            while (!t.IsFaulted)
-            {
-                Sleep(TimeSpan.FromSeconds(1));
-            }
-            WriteLine(t.Exception);
-
-            //try
-            //{
-            //    AsyncVoidWithErrors();
-            //    Sleep(TimeSpan.FromSeconds(3));
-            //}
-            //catch (Exception ex)
-            //{
-            //    WriteLine(ex);
-            //}
-
-            int[] numbers = { 1, 2, 3, 4, 5 };
-            Array.ForEach(numbers, async number =>
-            {
-                await Task.Delay(TimeSpan.FromSeconds(1));
-                if (number == 3) throw new Exception("Boom!");
-                WriteLine(number);
-            });
 
             ReadLine();
         }
-
-        static async Task AsyncTaskWithErrors()
+        
+        static async Task AsynchronousProcessing()
         {
-            string result = await GetInfoAsync("AsyncTaskException", 2);
+            var sync = new CustomAwaitable(true);
+            string result = await sync;
             WriteLine(result);
-        }
 
-        static async void AsyncVoidWithErrors()
-        {
-            string result = await GetInfoAsync("AsyncVoidException", 2);
+            var async = new CustomAwaitable(false);
+            result = await async;
             WriteLine(result);
-        }
-
-        static async Task AsyncTask()
-        {
-            string result = await GetInfoAsync("AsyncTask", 2);
-            WriteLine(result);
-        }
-
-        static async void AsyncVoid()
-        {
-            string result = await GetInfoAsync("AsyncVoid", 2);
-            WriteLine(result);
-        }
+        }        
 
         private static async Task<string> GetInfoAsync(string name, int seconds)
         {
@@ -87,6 +45,57 @@ namespace Multithreading
 
             return
                 $"Task {name} is running on a thread id {CurrentThread.ManagedThreadId}." +
+                $" Is thread pool thread: {CurrentThread.IsThreadPoolThread}";
+        }
+    }
+
+    class CustomAwaitable
+    {
+        private readonly bool completeSynchronously;
+
+        public CustomAwaitable(bool completeSynchronously)
+        {
+            this.completeSynchronously = completeSynchronously;
+        }
+
+        public CustomAwaiter GetAwaiter()
+        {
+            return new CustomAwaiter(this.completeSynchronously);
+        }
+    }
+
+    public class CustomAwaiter : INotifyCompletion
+    {
+        private string _result = "Completed synchronously";
+        private readonly bool completeSynchronously;
+
+        public bool IsCompleted => completeSynchronously;
+
+        public CustomAwaiter(bool completeSynchronously)
+        {
+            this.completeSynchronously = completeSynchronously;
+        }
+
+        public string GetResult()
+        {
+            return _result;
+        }
+
+        public void OnCompleted(Action continuation)
+        {
+            ThreadPool.QueueUserWorkItem(
+                state =>
+                {
+                    Sleep(TimeSpan.FromSeconds(1));
+                    _result = GetInfo();
+                    continuation?.Invoke();
+                });
+        }
+
+        private string GetInfo()
+        {
+            return
+                $"Task is running on a thread id {CurrentThread.ManagedThreadId}" +
                 $" Is thread pool thread: {CurrentThread.IsThreadPoolThread}";
         }
     }
