@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
 using static System.Console;
 using static System.Threading.Thread;
 
@@ -11,94 +14,72 @@ namespace Multithreading
 {
     class Program
     {
+        private static Label _label;
+
+        [STAThread]
         static void Main(string[] args)
         {
-            Task t = AsynchronousProcessing();
-            t.Wait();
+            var app = new Application();
+            var win = new Window();
+            var panel = new StackPanel();
+            var button = new Button();
+            _label = new Label();
+            _label.Height = 200;
+            _label.FontSize = 32;
+            button.Height = 100;
+            button.FontSize = 32;
+            button.Content = new TextBlock { Text = "Start asynchronous operations" };
+            button.Click += Click;
+            panel.Children.Add(_label);
+            panel.Children.Add(button);
+            win.Content = panel;
+            app.Run(win);
 
-            Console.ReadKey();
+            ReadLine();
         }
 
-        static async Task AsynchronousProcessing()
+        static async void Click(object sender, EventArgs e)
         {
-            // scenario 1
-            WriteLine("1. Single exception");
+            _label.Content = new TextBlock { Text = "Calculating..." };
+            TimeSpan resultWithContext = await Test();
+            TimeSpan resultNoContext = await TestNoContext();
+            //TimeSpan resultNoContext = await TestNoContext().ConfigureAwait(false);
 
-            try
-            {
-                string result = await GetInfoAsync("Task 1", 2);
-                WriteLine(result);
-            }
-            catch (Exception ex)
-            {
-                WriteLine($"Exception details: {ex}");
-            }
-
-            // scenario 2
-            WriteLine();
-            WriteLine("2. Multiple exceptions");
-
-            Task<string> t1 = GetInfoAsync("Task 1", 3);
-            Task<string> t2 = GetInfoAsync("Task 2", 5);
-            try
-            {
-                string[] results = await Task.WhenAll(t1, t2);
-                WriteLine(results.Length);
-            }
-            catch (Exception ex)
-            {
-                WriteLine($"Exception details: {ex}");
-            }
-
-            // scenario 3
-            WriteLine();
-            WriteLine("3. Multiple exceptions with AggregateException");
-
-            t1 = GetInfoAsync("Task 1", 3);
-            t2 = GetInfoAsync("Task 2", 2);
-            Task<string[]> t3 = Task.WhenAll(t1, t2);
-            try
-            {
-                string[] results = await t3;
-                WriteLine(results.Length);
-            }
-            catch
-            {
-                var ae = t3.Exception.Flatten();
-                var exceptions = ae.InnerExceptions;
-                WriteLine($"Exceptions caught: {exceptions.Count}");
-                foreach (var ex in exceptions)
-                {
-                    WriteLine($"Exception details: {ex}");
-                    WriteLine();
-                }
-            }
-
-            // scenario 4
-            WriteLine();
-            WriteLine("4. await in catch an finally blocks");
-
-            try
-            {
-                string result = await GetInfoAsync("Task 1", 2);
-                WriteLine(result);
-            }
-            catch (Exception ex)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(1));
-                WriteLine($"Catch block with await: Exception details: {ex}");
-            }
-            finally
-            {
-                await Task.Delay(TimeSpan.FromSeconds(1));
-                WriteLine("Finally block");
-            }
+            var sb = new StringBuilder();
+            sb.AppendLine($"With the context: {resultWithContext}");
+            sb.AppendLine($"Without the context: {resultNoContext}");
+            sb.AppendLine("Ratio: " +
+                $"{resultWithContext.TotalMilliseconds / resultNoContext.TotalMilliseconds:0.00}");
+            _label.Content = new TextBlock { Text = sb.ToString() };
         }
 
-        private static async Task<string> GetInfoAsync(string name, int seconds)
+        private static async Task<TimeSpan> Test()
         {
-            await Task.Delay(TimeSpan.FromSeconds(seconds));
-            throw new Exception($"Boom from {name}!");
+            const int iterationsNumber = 100000;
+            var sw = new Stopwatch();
+            sw.Start();
+            for (int i = 0; i < iterationsNumber; i++)
+            {
+                var t = Task.Run(() => { });
+                await t;
+            }
+            sw.Stop();
+            return sw.Elapsed;
+        }
+
+        private static async Task<TimeSpan> TestNoContext()
+        {
+            const int iterationsNumber = 100000;
+            var sw = new Stopwatch();
+            sw.Start();
+            for (int i = 0; i < iterationsNumber; i++)
+            {
+                var t = Task.Run(() => { });
+                await t.ConfigureAwait(
+                    continueOnCapturedContext: false);
+            }
+            sw.Stop();
+            return sw.Elapsed;
         }
     }
 }
