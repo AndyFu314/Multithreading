@@ -1,6 +1,8 @@
-﻿using System;
+﻿using ImpromptuInterface;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Dynamic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -26,77 +28,51 @@ namespace Multithreading
         
         static async Task AsynchronousProcessing()
         {
-            var sync = new CustomAwaitable(true);
-            string result = await sync;
+            string result = await GetDynamicAwaitableObject(true);
             WriteLine(result);
 
-            var async = new CustomAwaitable(false);
-            result = await async;
+            result = await GetDynamicAwaitableObject(false);
             WriteLine(result);
-        }        
+        }
 
-        private static async Task<string> GetInfoAsync(string name, int seconds)
+        private static dynamic GetDynamicAwaitableObject(bool completeSynchronously)
         {
-            await Task.Delay(TimeSpan.FromSeconds(seconds));
-            if (name.Contains("Exception"))
-            {
-                throw new Exception($"Boom from {name}!");
-            }
+            dynamic result = new ExpandoObject();
+            dynamic awaiter = new ExpandoObject();
 
+            awaiter.Message = "Completed synchronously";
+            awaiter.IsCompleted = completeSynchronously;
+            awaiter.GetResult = (Func<string>)(() => awaiter.Message);
+
+            awaiter.OnCompleted = (Action<Action>)(
+                callback => ThreadPool.QueueUserWorkItem(
+                    state =>
+                    {
+                        Sleep(TimeSpan.FromSeconds(1));
+                        awaiter.Message = GetInfo();
+                        callback?.Invoke();
+                    }));
+
+            IAwaiter<string> proxy = Impromptu.ActLike(awaiter);
+
+            result.GetAwaiter = (Func<dynamic>)(() => proxy);
+
+            return result;
+        }
+
+        static string GetInfo()
+        {
+            
             return
-                $"Task {name} is running on a thread id {CurrentThread.ManagedThreadId}." +
+                $"Task is running on a thread id {CurrentThread.ManagedThreadId}." +
                 $" Is thread pool thread: {CurrentThread.IsThreadPoolThread}";
         }
     }
 
-    class CustomAwaitable
+    public interface IAwaiter<T> : INotifyCompletion
     {
-        private readonly bool completeSynchronously;
+        bool IsCompleted { get; }
 
-        public CustomAwaitable(bool completeSynchronously)
-        {
-            this.completeSynchronously = completeSynchronously;
-        }
-
-        public CustomAwaiter GetAwaiter()
-        {
-            return new CustomAwaiter(this.completeSynchronously);
-        }
-    }
-
-    public class CustomAwaiter : INotifyCompletion
-    {
-        private string _result = "Completed synchronously";
-        private readonly bool completeSynchronously;
-
-        public bool IsCompleted => completeSynchronously;
-
-        public CustomAwaiter(bool completeSynchronously)
-        {
-            this.completeSynchronously = completeSynchronously;
-        }
-
-        public string GetResult()
-        {
-            return _result;
-        }
-
-        public void OnCompleted(Action continuation)
-        {
-            ThreadPool.QueueUserWorkItem(
-                state =>
-                {
-                    Sleep(TimeSpan.FromSeconds(1));
-                    _result = GetInfo();
-                    continuation?.Invoke();
-                });
-        }
-
-        private string GetInfo()
-        {
-            return
-                $"Task is running on a thread id {CurrentThread.ManagedThreadId}" +
-                $" Is thread pool thread: {CurrentThread.IsThreadPoolThread}";
-        }
+        T GetResult();
     }
 }
