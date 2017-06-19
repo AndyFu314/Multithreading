@@ -62,7 +62,6 @@ namespace Multithreading
 
         static string GetInfo()
         {
-            
             return
                 $"Task is running on a thread id {CurrentThread.ManagedThreadId}." +
                 $" Is thread pool thread: {CurrentThread.IsThreadPoolThread}";
